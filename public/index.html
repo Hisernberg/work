@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aozumi Test Bench — Feedback Tracker</title>
+  <style>
+    :root { --bg:#0b1020; --card:#141a30; --line:#232b4d; --text:#e7ebff; --muted:#8b93b8; --accent:#6c8cff; --high:#ff6c6c; --med:#ffc46c; --low:#6cd98a; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; min-height:100vh; padding:32px 16px; }
+    .wrap { max-width:760px; margin:0 auto; }
+    h1 { font-size:22px; letter-spacing:.3px; }
+    .sub { color:var(--muted); margin:4px 0 24px; font-size:14px; }
+    .badge { display:inline-block; padding:2px 10px; border-radius:999px; border:1px solid var(--line); font-size:12px; color:var(--muted); margin-left:8px; vertical-align:middle; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:16px; }
+    label { display:block; font-size:12px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin:12px 0 4px; }
+    input, select, textarea { width:100%; background:var(--bg); border:1px solid var(--line); border-radius:8px; color:var(--text); padding:9px 12px; font:inherit; }
+    textarea { min-height:84px; resize:vertical; }
+    button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:10px 18px; font:600 14px inherit; cursor:pointer; margin-top:14px; }
+    button.ghost { background:transparent; border:1px solid var(--line); color:var(--muted); padding:4px 10px; margin:0; font-size:12px; }
+    button:disabled { opacity:.5; cursor:wait; }
+    .note { border-top:1px solid var(--line); padding:14px 0; }
+    .note:first-child { border-top:0; }
+    .note h3 { font-size:15px; display:flex; align-items:center; gap:8px; }
+    .sev { font-size:11px; padding:1px 8px; border-radius:999px; font-weight:600; }
+    .sev.high { background:rgba(255,108,108,.15); color:var(--high); }
+    .sev.medium { background:rgba(255,196,108,.15); color:var(--med); }
+    .sev.low { background:rgba(108,217,138,.15); color:var(--low); }
+    .note p { color:var(--muted); font-size:14px; margin-top:4px; white-space:pre-wrap; }
+    .note .meta { display:flex; gap:10px; align-items:center; margin-top:8px; font-size:12px; color:var(--muted); }
+    .summary { margin-top:8px; padding:8px 12px; background:rgba(108,140,255,.08); border-left:3px solid var(--accent); border-radius:4px; font-size:13px; }
+    .empty { color:var(--muted); text-align:center; padding:24px 0; }
+    .err { color:var(--high); font-size:13px; margin-top:8px; min-height:16px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 id="appTitle">Aozumi Test Bench</h1>
+    <div class="sub">Feedback &amp; bug reports — deployed through Aozumi's repository → plan → protected link flow.</div>
+
+    <div class="card">
+      <h2 style="font-size:16px">New report</h2>
+      <form id="form">
+        <label for="title">Title</label>
+        <input id="title" name="title" placeholder="Short, specific: what happened?" required />
+        <label for="severity">Severity</label>
+        <select id="severity" name="severity">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+        </select>
+        <label for="body">Details</label>
+        <textarea id="body" name="body" placeholder="Steps to reproduce, expected vs actual, where you wanted to close the tab…"></textarea>
+        <button type="submit" id="submitBtn">Submit report</button>
+        <div class="err" id="err"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:16px">Reports <span class="badge" id="count">0</span></h2>
+      <div id="list"><div class="empty">No reports yet.</div></div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let config = { appName: "Aozumi Test Bench", hfConfigured: false };
+
+    async function loadConfig() {
+      try {
+        config = await (await fetch("/api/config")).json();
+        $("appTitle").textContent = config.appName;
+        document.title = config.appName;
+      } catch (e) { /* keep defaults */ }
+    }
+
+    async function loadNotes() {
+      const res = await fetch("/api/notes");
+      const { count, notes } = await res.json();
+      $("count").textContent = count;
+      const list = $("list");
+      if (!notes.length) { list.innerHTML = '<div class="empty">No reports yet.</div>'; return; }
+      list.innerHTML = "";
+      for (const n of notes) {
+        const div = document.createElement("div");
+        div.className = "note";
+        div.innerHTML = `
+          <h3>${escapeHtml(n.title)} <span class="sev ${n.severity}">${n.severity}</span></h3>
+          ${n.body ? `<p>${escapeHtml(n.body)}</p>` : ""}
+          <div class="meta">
+            <span>${new Date(n.createdAt).toLocaleString()}</span>
+            <button class="ghost" data-sum="${n.id}">AI summary</button>
+            <button class="ghost" data-del="${n.id}">Delete</button>
+          </div>
+          <div class="summary" data-summary="${n.id}" style="display:none"></div>`;
+        list.appendChild(div);
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+    }
+
+    $("form").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      $("submitBtn").disabled = true;
+      $("err").textContent = "";
+      try {
+        const res = await fetch("/api/notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: $("title").value, body: $("body").value, severity: $("severity").value }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || "failed");
+        $("form").reset();
+        await loadNotes();
+      } catch (e) { $("err").textContent = "Error: " + e.message; }
+      $("submitBtn").disabled = false;
+    });
+
+    $("list").addEventListener("click", async (ev) => {
+      const del = ev.target.getAttribute("data-del");
+      const sum = ev.target.getAttribute("data-sum");
+      if (del) { await fetch(`/api/notes/${del}`, { method: "DELETE" }); await loadNotes(); }
+      if (sum) {
+        const box = document.querySelector(`[data-summary="${sum}"]`);
+        box.style.display = "block"; box.textContent = "Summarizing…";
+        const res = await fetch(`/api/summarize/${sum}`, { method: "POST" });
+        const data = await res.json();
+        box.textContent = data.summary || data.message || data.error || "No summary available.";
+      }
+    });
+
+    loadConfig().then(loadNotes);
+  </script>
+</body>
+</html>
