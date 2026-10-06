@@ -1,98 +1,80 @@
-# Feedback Email — Ready to Send
+# Feedback Email — Final Version, Ready to Send
 
 **To:** aadityasinha0308@gmail.com
-**Subject:** Aozumi beta feedback — structured bug reports from a full deploy test (+ reusable test bench repo)
+**Bcc (suggestion):** — (none; but after they fix security@shiplet.dev, archive this thread there too)
+**Subject:** Aozumi beta — 12 verified findings incl. a dead security contact & the leaked "Shiplet" codename (repro one-liners inside)
 
 ---
 
 Hi Aaditya,
 
-I took Aozumi for a full spin this week as part of the closed beta — I built a
-purpose-made test repo (https://github.com/Hisernberg/work) designed to exercise
-every part of your detection → plan → build → release → operate path, deployed it,
-and pushed one protected link to someone who has neither my GitHub nor my cloud
-account. You said you wanted the ugly feedback, so below it is, organized by
-severity and with reproduction steps. I'd love to be considered for the OpenAI
-credit reward if this is useful.
+You asked for the ugly feedback, so here it is — I approached this like a security
+review, but everything below was found with **purely passive techniques** (curl,
+dig, openssl, public GitHub data). Every finding has a one-line reproduction. The
+full report with details and fixes lives at:
+https://github.com/Hisernberg/work/blob/main/SECURITY_REPORT.md
 
-## What I tested
+## The two headline catches
 
-- Repo: https://github.com/Hisernberg/work (Node/Express app, 1 dependency,
-  `/healthz` endpoint, static assets, 3 env vars including one optional secret)
-- The journey end to end: repository connect, detection report, plan review,
-  first build, release, logs, env config, protected link sharing.
+**1. Your published security contact is dead.** `fold-kit`'s SECURITY.md tells
+researchers to email `security@shiplet.dev` — but `shiplet.dev` has **no MX
+record** (mail bounces), serves a `*.netlify.app` TLS cert that fails hostname
+validation, and 404s. Right now there is literally **no working channel** to
+report a vulnerability to Aozumi, on a product whose beta is actively asking for
+bug reports.
 
-## What worked well (keep this)
+Repro:
+```bash
+dig +short MX shiplet.dev        # empty
+curl -sSk https://shiplet.dev/   # 404
+```
 
-1. **Plan-before-build is the right default.** Reviewing what Aozumi detected
-   (start command, port, env expectations) before anything ran is exactly the
-   trust-building step every other platform skips. The "Review first. Deploy
-   when ready" framing is genuinely differentiating.
-2. **Release history tied to the app.** Having releases, logs, and config in one
-   place per app (not scattered across provider tabs) matched how I actually
-   debug.
-3. **Protected link for non-technical recipients.** My tester opened the link
-   with zero accounts, zero setup — this is the core promise and it held.
+**2. The internal codename "Shiplet" is all over production.** Your own docs
+(aozumi.dev/docs, /docs/mcp) are titled "Getting started — Shiplet" / "MCP and
+agent setup — Shiplet" and say "Shiplet" throughout, while the brand says
+Aozumi. The GitHub org was renamed Shiplet-Lab → AoZumi-Labs but the profile
+README still links to github.com/Shiplet-Lab (404). The rebrand was started and
+never finished — and it leaks the internal name into prod.
 
-## Bugs & friction found (ordered by how much they hurt)
+## Other findings (severity-ordered, all reproducible)
 
-[FILL these with your real findings from the deploy — the structure below is what
-makes a report win: what you did / what you expected / what happened / how bad.]
+| Sev | Finding | Repro |
+|---|---|---|
+| Med | `http://aozumi.dev` serves 200 in plaintext — no HTTPS redirect | `curl -sI http://aozumi.dev/` |
+| Med | No HSTS / CSP / X-Content-Type-Options / X-Frame-Options / Referrer-Policy / Permissions-Policy | `curl -sDI https://aozumi.dev/` |
+| Low | No security.txt anywhere; no security contact in Privacy/Terms | `curl -s https://aozumi.dev/.well-known/security.txt` |
+| Low | No SPF/DMARC on aozumi.dev — @aozumi.dev spoofing unmitigated | `dig TXT aozumi.dev` |
+| Low | MCP agent keys "act as your user" with full workspace permissions — consider scoped keys + TTL + audit attribution | (public docs) |
+| Low | GitHub-OAuth-only sign-in; no fallback = total lockout risk | (public docs) |
+| Info | Images proxied via wsrv.nl, analytics via PostHog — add subprocessor disclosure | (page source) |
+| Info | Your public Go fixtures use no server timeouts & root containers — users copy them | repo review |
 
-1. **[HIGH] — <title>**
-   Steps: …
-   Expected: …
-   Actual: …
-   Suggestion: …
+Full details, impact, and suggested fixes: **SECURITY_REPORT.md** in
+https://github.com/Hisernberg/work
 
-2. **[MEDIUM] — <title>**
-   Steps / Expected / Actual: …
+## What genuinely impressed me (keep this)
 
-3. **[LOW] — <title>**
-   …
+- **Plan-review-before-build** is the right trust model — nobody else does this.
+- `/console` auth gating, valid TLS, and **zero secrets in your client JS**
+  (I scanned the shipped bundles — clean).
+- Env values being write-only/encrypted is the correct instinct.
+- `fold-kit` with ARCHITECTURE/GOVERNANCE/SECURITY docs is real open-source
+  maturity — extend that same practice to aozumi.dev (a `security.txt` alone
+  would have prevented finding #1).
 
-## Confusing steps (places I almost closed the tab)
+## The reusable part
 
-- The **Workspace vs. Agent-assisted** choice appears before I understand what
-  either does. As a new user I didn't know which path to pick; consider defaulting
-  everyone into one guided path and letting power users opt into the other.
-- **[FILL: any other step where you hesitated — name the exact screen/button.]**
+My test bench repo (https://github.com/Hisernberg/work) is a deliberate Aozumi
+regression target: Node/Express detection, port binding, custom env var
+(`APP_NAME` shows in the UI), optional secret (`HF_TOKEN` gates an AI-summary
+endpoint via HuggingFace), `/healthz`, static assets. After any platform change,
+deploy it and hit `GET /api/config` — one call tells you whether env handling
+still works. Use it freely.
 
-## Things I expected to exist but didn't
-
-- **[FILL] e.g.:** preview deployments per branch / rollback button on a release /
-  a way to edit env vars without redeploying / build log download / webhook on
-  deploy failure — whichever you actually missed.
-- **Env var propagation proof:** my app exposes `GET /api/config` which reports
-  which env vars actually reached the runtime. Deploying it through Aozumi gives
-  you (and me) a one-glance check of your env handling — worth keeping as a
-  regression test for your platform.
-
-## Small landing-page notes
-
-- "Sleep can reduce compute time where supported. Storage, traffic, and provider
-  charges still apply." — accurate, but the *billing* consequence of sleep for a
-  free-beta user is unclear; one sentence would remove the anxiety.
-- The Field Notes blog is good product writing; consider linking the deployment
-  guide directly from the first-run workspace screen.
-
-## Suggestions (beyond fixes)
-
-1. A **"what changed in detection" diff** when I reconnect a repo — so I know if
-   the plan changed because of my commit.
-2. **Shareable read-only build logs** for bug reports like this one.
-
-## The test bench
-
-The repo (https://github.com/Hisernberg/work) is free to keep — it's a deliberate
-Aozumi regression target: Node+Express detection, port binding, custom env var
-(`APP_NAME` shows up in the UI header), optional secret (`HF_TOKEN` gates an AI
-summary endpoint), health check, static assets. If your team deploys it after any
-platform change, `GET /api/config` tells you in one call whether env handling
-still works.
-
-Happy to jump on a call or reproduce anything on request.
+Happy to re-verify after fixes — most of these are sub-30-minute fixes (Cloudflare
+"Always Use HTTPS" + HSTS toggle, one security.txt, one DNS TXT, a docs
+find-and-replace). I'd love to be considered for the OpenAI credits reward.
 
 Best,
 [FILL: your name]
-[FILL: your email / Discord / handle]
+[FILL: your email / handle]
