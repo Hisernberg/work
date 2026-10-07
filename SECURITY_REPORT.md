@@ -4,6 +4,7 @@
 **Date:** 2026-10-06
 **Method:** Passive, non-intrusive reconnaissance only — public HTTP responses, public DNS, public TLS certificates, public GitHub repositories, and the vendor's own published documentation. No scanning, fuzzing, injection, authentication bypass, or any active testing was performed against aozumi.dev infrastructure. Every finding below is reproducible with a single `curl`/`dig` command.
 **Why passive-only:** Aozumi's beta post invites product bug reports, but no published vulnerability-disclosure policy or security.txt exists for aozumi.dev, so active security testing is out of scope without written authorization.
+**Companion report:** [`FOLD_KIT_REVIEW.md`](FOLD_KIT_REVIEW.md) — 15 additional verified findings inside the team's open-source `@shiplet-labs/fold` package (total for this beta: 27).
 
 ---
 
